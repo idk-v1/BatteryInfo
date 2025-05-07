@@ -175,6 +175,9 @@ int main(int argc, char** argv)
 	enableVT();
 	disableCursor();
 
+	// TODO: get battery name dynamically
+	// for now: 
+	// Device Manager -> Batteries -> {battery device} -> Details -> Physical Device Object name
 	HANDLE hDev = openDevice("\\\\.\\GLOBALROOT\\Device\\0000002f");
 	winErr("Open Device");
 
