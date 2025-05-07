@@ -116,7 +116,7 @@ static void printBatteryInfo(BATTERY_INFORMATION batteryInfo, BATTERY_STATUS bat
 {
 	printf(CURSOR(1, 1));
 
-	printf("Power State:  %s\n",
+	printf("Power State: %s\n",
 		(batteryStatus.PowerState & BATTERY_POWER_ON_LINE) ?
 		(COLOR(32) "Charging   " DEFCOLOR()) :
 		(COLOR(31) "Discharging" DEFCOLOR()));
@@ -129,32 +129,36 @@ static void printBatteryInfo(BATTERY_INFORMATION batteryInfo, BATTERY_STATUS bat
 	printf("\n");
 
 
-	printf("Wear:         %8.2f%%\n",
+	printf("Wear: %.2f%%         \n",
 		100.f * batteryInfo.FullChargedCapacity / (float)batteryInfo.DesignedCapacity - 100.f);
 
-	printf("New:          %8u\n", 
+	printf("New: %u            \n", 
 		batteryInfo.DesignedCapacity);
 
-	printf("Full:         %8u\n", 
+	printf("Full: %u            \n", 
 		batteryInfo.FullChargedCapacity);
 
-	printf("Charge:       %8u\n",
+	printf("Charge: %u            \n",
 		batteryStatus.Capacity);
 
 	printf("\n");
 
 
-	printf("Percent:       %8.3f%%\n", 
-		(float)batteryStatus.Capacity / batteryInfo.FullChargedCapacity * 100.f);
-
-	printf("               %+8.3f%%/sec      \n", 
-		(float)deltaCharge / (float)batteryInfo.FullChargedCapacity * 100.f / (float)(deltaTime / 1000.f));
-
-	printf("Delta Charge: %+5d\n",
+	printf("Delta Charge: %+d       \n",
 		deltaCharge);
 
-	printf("Delta Time:   %8.2f sec\n",
+	printf("Delta Time: %.2f sec       \n",
 		deltaTime / 1000.f);
+
+	printf("\n");
+
+
+	printf("Percent: %.3f%%       \n",
+		(float)batteryStatus.Capacity / batteryInfo.FullChargedCapacity * 100.f);
+
+	printf("%+.3f%%/sec         \n",
+		(float)deltaCharge / (float)batteryInfo.FullChargedCapacity * 100.f / (float)(deltaTime / 1000.f));
+
 }
 
 
