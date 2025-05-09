@@ -18,6 +18,24 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\main.c" />
+    <ClCompile Include="src\softdraw\image\image.c" />
+    <ClCompile Include="src\softdraw\input\input.c" />
+    <ClCompile Include="src\softdraw\input\win32_input.c" />
+    <ClCompile Include="src\softdraw\timer\timer.c" />
+    <ClCompile Include="src\softdraw\timer\win32_timer.c" />
+    <ClCompile Include="src\softdraw\window\win32_window.c" />
+    <ClCompile Include="src\softdraw\window\window.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\softdraw\image\image.h" />
+    <ClInclude Include="src\softdraw\input\input.h" />
+    <ClInclude Include="src\softdraw\softdraw.h" />
+    <ClInclude Include="src\softdraw\timer\timer.h" />
+    <ClInclude Include="src\softdraw\util.h" />
+    <ClInclude Include="src\softdraw\window\window.h" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -126,9 +144,6 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="main.c" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

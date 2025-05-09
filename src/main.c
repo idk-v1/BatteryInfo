@@ -13,6 +13,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include "softdraw/softdraw.h"
+
 #define ARRAY(type) typedef struct { type* data; uint64_t size; } type##_Array
 
 ARRAY(HANDLE);
@@ -155,7 +157,7 @@ static void resetCursor()
 	printf("\x1B[1;1H");
 }
 
-#define ERASE() "\x1B[0K"
+#define ERASE "\x1B[0K"
 
 #define COLOR(id) "\x1B["#id";1m"
 #define DEFCOLOR() "\x1B[;0m"
@@ -221,26 +223,59 @@ int main(int argc, char** argv)
 	disableCursor();
 
 
-	BatteryInfo battery = initBattery("\\\\.\\GLOBALROOT\\Device\\0000002f");
-
 	// TODO: get battery name dynamically
 	// for now: 
 	// Device Manager -> Batteries -> {battery device} -> Details -> Physical Device Object name
+	BatteryInfo battery = initBattery("\\\\.\\GLOBALROOT\\Device\\0000002f");
 
-	while (!(GetKeyState(VK_ESCAPE) & 0x8000))
+	sft_init();
+	sft_window* win = sft_window_open("", 24 * 8.5, 32, -1, -1, 
+		sft_flag_borderless | sft_flag_noresize | sft_flag_syshide);
+
+	sft_window_fill(win, 0xFF000000);
+	sft_window_drawTextF(win, 0, 8, 3, 0xFFFFFFFF, "%6.2f%%",
+		battery.charge * 100.f / battery.capacity);
+	sft_window_drawText(win, "X", 24 * 7.5, 8, 3, 0xFFFF0000);
+	sft_window_display(win);
+
+	sft_rect close = { 24 * 7.5, 8, 24, 24 };
+
+	int offset = 250;
+
+	while (sft_window_update(win))
 	{
+		SetWindowPos(win->handle, HWND_TOPMOST, 
+			sft_screenWidth() - (24 * 8.5) - offset, 
+			sft_screenHeight() - 32, 
+			24 * 8.5, 32, SWP_NOACTIVATE);
+
+		sft_input_update();
+
+		if (sft_colPointRect(close, sft_input_mousePos(win)) && 
+			sft_input_clickPressed(sft_click_Left))
+			break;
+
 		if (updateBatteryInfo(&battery))
 		{
+			sft_window_fill(win, 0xFF000000);
+			sft_window_drawTextF(win, 0, 8, 3, 0xFFFFFFFF, "%6.2f%%",
+				battery.charge * 100.f / battery.capacity);
+			sft_window_drawText(win, "X", 24 * 7.5, 8, 3, 0xFFFF0000);
+			sft_window_display(win);
+
 			resetCursor(); 
-			printf("Capacity: %s%8u\n", ERASE(), battery.capacity);
-			printf("Charge:   %s%8u\n", ERASE(), battery.charge);
-			printf("Percent:  %s%7.3f%%\n", ERASE(), battery.charge * 100.f / battery.capacity);
+			printf("Capacity: %s%8u\n", ERASE, battery.capacity);
+			printf("Charge:   %s%8u\n", ERASE, battery.charge);
+			printf("Percent:  %s%7.3f%%\n", ERASE, battery.charge * 100.f / battery.capacity);
 		}
 
 		Sleep(50);
 	}
+	sft_window_close(win);
 
 	releaseBattery(&battery);
+
+	sft_shutdown();
 
 	return 0;
 }
