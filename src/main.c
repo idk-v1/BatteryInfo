@@ -223,9 +223,9 @@ static void releaseBattery(BatteryInfo* battery)
 
 static void draw(sft_window* win, BatteryInfo* battery)
 {
-	sft_window_fill(win, 0xFF000000);
+	sft_window_fill(win, 0x00000000);
 
-	sft_window_drawTextF(win, 0, 8, 3, 0xFFFFFFFF, "%06.2f%%",
+	sft_window_drawTextF(win, 0, 8, 3, 0xFFFFFFFF, "%6.2f%%",
 		battery->charge * 100.f / battery->capacity);
 
 	sft_window_drawText(win, "X", 24 * 8, 8, 3, 0xFFFF0000);
