@@ -253,18 +253,15 @@ int main(int argc, char** argv)
 
 
 	sft_init();
-	sft_window* win = sft_window_open("", 24 * 9, 32, -1, -1, 
-		sft_flag_borderless | sft_flag_noresize | sft_flag_syshide);
-	sft_window_setSize(win, 24 * 9, 32);
-	sft_window_setPos(win, sft_screenWidth() - (24 * 9) - offset, sft_screenHeight() - 32);
-	sft_window_setTopmost(win, true);
+	sft_window* win = sft_window_open("", 24 * 9, 32, 
+		sft_screenWidth() - (24 * 9) - offset, sft_screenHeight() - 32,
+		sft_flag_borderless | sft_flag_noresize | sft_flag_syshide | sft_flag_topmost);
 
 	draw(win, &battery);
 
 
 	while (sft_window_update(win))
 	{
-		sft_window_setPos(win, sft_screenWidth() - (24 * 9) - offset, sft_screenHeight() - 32);
 		sft_window_setTopmost(win, true);
 
 		sft_input_update();
