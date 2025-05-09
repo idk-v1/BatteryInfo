@@ -5,12 +5,17 @@
 #include <ioapiset.h>
 #include <winioctl.h>
 #include <Poclass.h>
+#include <setupapi.h>
+#include <Devguid.h>
 
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
+#define ARRAY(type) typedef struct { type* data; uint64_t size; } type##_Array
+
+ARRAY(HANDLE);
 
 static void winErr(const char* label)
 {
@@ -36,11 +41,50 @@ static HANDLE openDevice(const char* name)
 		NULL, OPEN_EXISTING, 0, NULL);
 }
 
-static void releaseDevice(HANDLE* hDev)
+
+// Unfinished
+static HANDLE_Array getBatteries()
 {
-	CloseHandle(*hDev);
-	*hDev = NULL;
+	HANDLE_Array handles = { 0 };
+
+	HDEVINFO hDevInfo = SetupDiGetClassDevsA(&GUID_DEVCLASS_BATTERY, 
+		NULL, NULL,	DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+
+	for (uint64_t i = 0; ; i++)
+	{
+		SP_DEVICE_INTERFACE_DATA did = { 0 };
+		did.cbSize = sizeof(did);
+
+		if (SetupDiEnumDeviceInterfaces(hDevInfo, NULL,
+			&GUID_DEVCLASS_BATTERY, i, &did))
+		{
+
+			uint32_t reqSize = 0;
+			SetupDiGetDeviceInterfaceDetailA(hDevInfo, &did,
+				NULL, NULL, &reqSize, NULL);
+
+			PSP_DEVICE_INTERFACE_DETAIL_DATA pdidd = malloc(reqSize);
+			if (pdidd)
+			{
+				pdidd->cbSize = sizeof(pdidd);
+
+				SetupDiGetDeviceInterfaceDetailA(hDevInfo, &did,
+					pdidd, reqSize, &reqSize, NULL);
+
+				HANDLE battery = openDevice(pdidd->DevicePath);
+
+				free(pdidd);
+			}
+		}
+		else
+			break;
+	}
+
+	SetupDiDestroyDeviceInfoList(hDevInfo);
+
+	return handles;
 }
+
 
 
 static uint32_t getBatteryTag(HANDLE hDev)
@@ -106,71 +150,68 @@ static void disableCursor()
 	printf("\x1B[?25l");
 }
 
-#define CURSOR(x, y) "\x1B["#y";"#x"H"
+static void resetCursor()
+{
+	printf("\x1B[1;1H");
+}
+
+#define ERASE() "\x1B[0K"
 
 #define COLOR(id) "\x1B["#id";1m"
 #define DEFCOLOR() "\x1B[;0m"
 
-static void printBatteryInfo(BATTERY_INFORMATION batteryInfo, BATTERY_STATUS batteryStatus,
-	uint64_t deltaTime, int32_t deltaCharge)
-{
-	printf(CURSOR(1, 1));
-
-	printf("Power State: %s\n",
-		(batteryStatus.PowerState & BATTERY_POWER_ON_LINE) ?
-		(COLOR(32) "Charging   " DEFCOLOR()) :
-		(COLOR(31) "Discharging" DEFCOLOR()));
-
-	printf("Battery Type: %s\n",
-		(batteryInfo.Capabilities & BATTERY_IS_SHORT_TERM) ?
-		(COLOR(31) "Fail-Safe" DEFCOLOR()) :
-		(COLOR(32) "Battery  " DEFCOLOR()));
-
-	printf("\n");
-
-
-	printf("Wear: %.2f%%         \n",
-		100.f * batteryInfo.FullChargedCapacity / (float)batteryInfo.DesignedCapacity - 100.f);
-
-	printf("New: %u            \n", 
-		batteryInfo.DesignedCapacity);
-
-	printf("Full: %u            \n", 
-		batteryInfo.FullChargedCapacity);
-
-	printf("Charge: %u            \n",
-		batteryStatus.Capacity);
-
-	printf("\n");
-
-
-	printf("Delta Charge: %+d       \n",
-		deltaCharge);
-
-	printf("Delta Time: %.2f sec       \n",
-		deltaTime / 1000.f);
-
-	printf("\n");
-
-
-	printf("Percent: %.3f%%       \n",
-		(float)batteryStatus.Capacity / batteryInfo.FullChargedCapacity * 100.f);
-
-	printf("%+.3f%%/sec         \n",
-		(float)deltaCharge / (float)batteryInfo.FullChargedCapacity * 100.f / (float)(deltaTime / 1000.f));
-
-}
-
-
-static uint64_t timeDiff(uint64_t* last)
+static uint64_t getTimeMS()
 {
 	uint64_t time = 0;
 	QueryPerformanceCounter((LARGE_INTEGER*)&time);
 
-	uint64_t diff = time - *last;
-	*last = time;
+	return time / 10'000;
+}
 
-	return diff;
+typedef struct BatteryInfo
+{
+	HANDLE handle;
+	uint32_t wear;
+	uint32_t capacity;
+	uint32_t charge;
+} BatteryInfo;
+
+
+static bool updateBatteryInfo(BatteryInfo* battery)
+{
+	BATTERY_STATUS batteryStatus = getBatteryStatus(battery->handle);
+
+	if (battery->charge != batteryStatus.Capacity)
+	{
+		battery->charge = batteryStatus.Capacity;
+		return true;
+	}
+
+	return false;
+}
+
+
+static BatteryInfo initBattery(const char* name)
+{
+	BatteryInfo battery = { 0 };
+
+	battery.handle = openDevice(name);
+
+	BATTERY_INFORMATION batteryInfo = getBatteryInfo(battery.handle);
+	battery.capacity = batteryInfo.FullChargedCapacity;
+
+	battery.wear = batteryInfo.DesignedCapacity;
+	battery.wear -= battery.capacity;
+
+	updateBatteryInfo(&battery);
+
+	return battery;
+}
+
+static void releaseBattery(BatteryInfo* battery)
+{
+	CloseHandle(battery->handle);
+	memset(battery, 0, sizeof(*battery));
 }
 
 
@@ -179,41 +220,27 @@ int main(int argc, char** argv)
 	enableVT();
 	disableCursor();
 
+
+	BatteryInfo battery = initBattery("\\\\.\\GLOBALROOT\\Device\\0000002f");
+
 	// TODO: get battery name dynamically
 	// for now: 
 	// Device Manager -> Batteries -> {battery device} -> Details -> Physical Device Object name
-	HANDLE hDev = openDevice("\\\\.\\GLOBALROOT\\Device\\0000002f");
-	winErr("Open Device");
-
-	uint64_t lastTime;
-	timeDiff(&lastTime);
-	uint64_t deltaTime = 1;
-
-	uint32_t lastCharge = getBatteryStatus(hDev).Capacity;
-	int32_t deltaCharge = 0;
 
 	while (!(GetKeyState(VK_ESCAPE) & 0x8000))
 	{
-		BATTERY_INFORMATION batteryInfo = getBatteryInfo(hDev);
-		winErr("Get Battery Info");
-
-		BATTERY_STATUS batteryStatus = getBatteryStatus(hDev);
-		winErr("Get Battery Status");
-
-		if (lastCharge != batteryStatus.Capacity)
+		if (updateBatteryInfo(&battery))
 		{
-			deltaTime = timeDiff(&lastTime);
-			deltaCharge = (int32_t)batteryStatus.Capacity - (int32_t)lastCharge;
-			lastCharge = batteryStatus.Capacity;
+			resetCursor(); 
+			printf("Capacity: %s%8u\n", ERASE(), battery.capacity);
+			printf("Charge:   %s%8u\n", ERASE(), battery.charge);
+			printf("Percent:  %s%7.3f%%\n", ERASE(), battery.charge * 100.f / battery.capacity);
 		}
-
-		printBatteryInfo(batteryInfo, batteryStatus, deltaTime / 10'000, deltaCharge);
-
 
 		Sleep(50);
 	}
 
-	releaseDevice(&hDev);
+	releaseBattery(&battery);
 
 	return 0;
 }
