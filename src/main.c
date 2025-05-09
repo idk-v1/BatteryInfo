@@ -242,28 +242,30 @@ int main(int argc, char** argv)
 	enableVT();
 	disableCursor();
 
+	sft_rect close = { 24 * 8, 8, 24, 24 };
+
+	int offset = 250;
 
 	// TODO: get battery name dynamically
 	// for now: 
 	// Device Manager -> Batteries -> {battery device} -> Details -> Physical Device Object name
 	BatteryInfo battery = initBattery("\\\\.\\GLOBALROOT\\Device\\0000002f");
 
+
 	sft_init();
 	sft_window* win = sft_window_open("", 24 * 9, 32, -1, -1, 
 		sft_flag_borderless | sft_flag_noresize | sft_flag_syshide);
+	sft_window_setSize(win, 24 * 9, 32);
+	sft_window_setPos(win, sft_screenWidth() - (24 * 9) - offset, sft_screenHeight() - 32);
+	sft_window_setTopmost(win, true);
 
 	draw(win, &battery);
 
-	sft_rect close = { 24 * 8, 8, 24, 24 };
-
-	int offset = 250;
 
 	while (sft_window_update(win))
 	{
-		SetWindowPos(win->handle, HWND_TOPMOST, 
-			sft_screenWidth() - (24 * 9) - offset, 
-			sft_screenHeight() - 32, 
-			24 * 9, 32, SWP_NOACTIVATE);
+		sft_window_setPos(win, sft_screenWidth() - (24 * 9) - offset, sft_screenHeight() - 32);
+		sft_window_setTopmost(win, true);
 
 		sft_input_update();
 
@@ -276,7 +278,7 @@ int main(int argc, char** argv)
 			draw(win, &battery);
 		}
 
-		Sleep(50);
+		sft_sleep(50);
 	}
 	sft_window_close(win);
 
