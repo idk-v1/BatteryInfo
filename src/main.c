@@ -176,6 +176,7 @@ typedef struct BatteryInfo
 	uint32_t wear;
 	uint32_t capacity;
 	uint32_t charge;
+	uint8_t isCharging;
 } BatteryInfo;
 
 
@@ -183,8 +184,11 @@ static bool updateBatteryInfo(BatteryInfo* battery)
 {
 	BATTERY_STATUS batteryStatus = getBatteryStatus(battery->handle);
 
-	if (battery->charge != batteryStatus.Capacity)
+	bool isCharging = (batteryStatus.PowerState & BATTERY_POWER_ON_LINE) != 0;
+
+	if (battery->charge != batteryStatus.Capacity || battery->isCharging != isCharging)
 	{
+		battery->isCharging = isCharging;
 		battery->charge = batteryStatus.Capacity;
 		return true;
 	}
@@ -217,6 +221,22 @@ static void releaseBattery(BatteryInfo* battery)
 }
 
 
+static void draw(sft_window* win, BatteryInfo* battery)
+{
+	sft_window_fill(win, 0xFF000000);
+
+	sft_window_drawTextF(win, 0, 8, 3, 0xFFFFFFFF, "%06.2f%%",
+		battery->charge * 100.f / battery->capacity);
+
+	sft_window_drawText(win, "X", 24 * 8, 8, 3, 0xFFFF0000);
+
+	if (battery->isCharging)
+		sft_window_drawText(win, "+", 24 * 7, 8, 3, 0xFF00FF00);
+
+	sft_window_display(win);
+}
+
+
 int main(int argc, char** argv)
 {
 	enableVT();
@@ -229,25 +249,21 @@ int main(int argc, char** argv)
 	BatteryInfo battery = initBattery("\\\\.\\GLOBALROOT\\Device\\0000002f");
 
 	sft_init();
-	sft_window* win = sft_window_open("", 24 * 8.5, 32, -1, -1, 
+	sft_window* win = sft_window_open("", 24 * 9, 32, -1, -1, 
 		sft_flag_borderless | sft_flag_noresize | sft_flag_syshide);
 
-	sft_window_fill(win, 0xFF000000);
-	sft_window_drawTextF(win, 0, 8, 3, 0xFFFFFFFF, "%6.2f%%",
-		battery.charge * 100.f / battery.capacity);
-	sft_window_drawText(win, "X", 24 * 7.5, 8, 3, 0xFFFF0000);
-	sft_window_display(win);
+	draw(win, &battery);
 
-	sft_rect close = { 24 * 7.5, 8, 24, 24 };
+	sft_rect close = { 24 * 8, 8, 24, 24 };
 
 	int offset = 250;
 
 	while (sft_window_update(win))
 	{
 		SetWindowPos(win->handle, HWND_TOPMOST, 
-			sft_screenWidth() - (24 * 8.5) - offset, 
+			sft_screenWidth() - (24 * 9) - offset, 
 			sft_screenHeight() - 32, 
-			24 * 8.5, 32, SWP_NOACTIVATE);
+			24 * 9, 32, SWP_NOACTIVATE);
 
 		sft_input_update();
 
@@ -257,16 +273,7 @@ int main(int argc, char** argv)
 
 		if (updateBatteryInfo(&battery))
 		{
-			sft_window_fill(win, 0xFF000000);
-			sft_window_drawTextF(win, 0, 8, 3, 0xFFFFFFFF, "%6.2f%%",
-				battery.charge * 100.f / battery.capacity);
-			sft_window_drawText(win, "X", 24 * 7.5, 8, 3, 0xFFFF0000);
-			sft_window_display(win);
-
-			resetCursor(); 
-			printf("Capacity: %s%8u\n", ERASE, battery.capacity);
-			printf("Charge:   %s%8u\n", ERASE, battery.charge);
-			printf("Percent:  %s%7.3f%%\n", ERASE, battery.charge * 100.f / battery.capacity);
+			draw(win, &battery);
 		}
 
 		Sleep(50);
