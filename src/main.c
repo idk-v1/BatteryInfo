@@ -221,6 +221,19 @@ static void releaseBattery(BatteryInfo* battery)
 }
 
 
+static uint32_t getSystrayPos()
+{
+	// Get taskbar window handle, then get tray window handle
+	HWND taskHwnd = FindWindowA("Shell_TrayWnd", NULL);
+	HWND trayHwnd = FindWindowExA(taskHwnd, NULL, "TrayNotifyWnd", NULL);
+
+	RECT rect;
+	GetWindowRect(trayHwnd, &rect);
+	return rect.left;
+}
+
+
+
 static void draw(sft_window* win, BatteryInfo* battery)
 {
 	sft_window_fill(win, 0x00000000);
@@ -244,8 +257,6 @@ int main(int argc, char** argv)
 
 	sft_rect close = { 24 * 8, 8, 24, 24 };
 
-	int offset = 250;
-
 	// TODO: get battery name dynamically
 	// for now: 
 	// Device Manager -> Batteries -> {battery device} -> Details -> Physical Device Object name
@@ -254,21 +265,21 @@ int main(int argc, char** argv)
 
 	sft_init();
 	sft_window* win = sft_window_open("", 24 * 9, 32, 
-		sft_screenWidth() - (24 * 9) - offset, sft_screenHeight() - 32,
+		getSystrayPos() - (24 * 9),
+		sft_screenHeight() - 32,
 		sft_flag_borderless | sft_flag_noresize | sft_flag_syshide | sft_flag_topmost);
 
 	draw(win, &battery);
 
 
-	while (sft_window_update(win))
+	while (sft_window_update(win) && 
+		!(sft_colPointRect(close, sft_input_mousePos(win)) &&
+		sft_input_clickPressed(sft_click_Left)))
 	{
 		sft_window_setTopmost(win, true);
+		sft_window_setPos(win, getSystrayPos() - (24 * 9), sft_screenHeight() - 32);
 
 		sft_input_update();
-
-		if (sft_colPointRect(close, sft_input_mousePos(win)) && 
-			sft_input_clickPressed(sft_click_Left))
-			break;
 
 		if (updateBatteryInfo(&battery))
 		{
