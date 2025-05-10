@@ -15,10 +15,6 @@
 
 #include "softdraw/softdraw.h"
 
-#define ARRAY(type) typedef struct { type* data; uint64_t size; } type##_Array
-
-ARRAY(HANDLE);
-
 static void winErr(const char* label)
 {
 	DWORD err = GetLastError();
@@ -34,7 +30,6 @@ static void winErr(const char* label)
 	}
 }
 
-
 static HANDLE openDevice(const char* name)
 {
 	return CreateFileA(name,
@@ -42,52 +37,6 @@ static HANDLE openDevice(const char* name)
 		FILE_SHARE_READ | FILE_SHARE_WRITE,
 		NULL, OPEN_EXISTING, 0, NULL);
 }
-
-
-// Unfinished
-static HANDLE_Array getBatteries()
-{
-	HANDLE_Array handles = { 0 };
-
-	HDEVINFO hDevInfo = SetupDiGetClassDevsA(&GUID_DEVCLASS_BATTERY, 
-		NULL, NULL,	DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
-
-	for (uint64_t i = 0; ; i++)
-	{
-		SP_DEVICE_INTERFACE_DATA did = { 0 };
-		did.cbSize = sizeof(did);
-
-		if (SetupDiEnumDeviceInterfaces(hDevInfo, NULL,
-			&GUID_DEVCLASS_BATTERY, i, &did))
-		{
-
-			uint32_t reqSize = 0;
-			SetupDiGetDeviceInterfaceDetailA(hDevInfo, &did,
-				NULL, NULL, &reqSize, NULL);
-
-			PSP_DEVICE_INTERFACE_DETAIL_DATA pdidd = malloc(reqSize);
-			if (pdidd)
-			{
-				pdidd->cbSize = sizeof(pdidd);
-
-				SetupDiGetDeviceInterfaceDetailA(hDevInfo, &did,
-					pdidd, reqSize, &reqSize, NULL);
-
-				HANDLE battery = openDevice(pdidd->DevicePath);
-
-				free(pdidd);
-			}
-		}
-		else
-			break;
-	}
-
-	SetupDiDestroyDeviceInfoList(hDevInfo);
-
-	return handles;
-}
-
-
 
 static uint32_t getBatteryTag(HANDLE hDev)
 {
@@ -137,39 +86,6 @@ static BATTERY_STATUS getBatteryStatus(HANDLE hDev)
 	return batteryStatus;
 }
 
-
-static void enableVT()
-{
-	HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-	uint32_t consoleMode = 0;
-	GetConsoleMode(hOut, (DWORD*)&consoleMode);
-	consoleMode |= ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-	SetConsoleMode(hOut, consoleMode);
-}
-
-static void disableCursor()
-{
-	printf("\x1B[?25l");
-}
-
-static void resetCursor()
-{
-	printf("\x1B[1;1H");
-}
-
-#define ERASE "\x1B[0K"
-
-#define COLOR(id) "\x1B["#id";1m"
-#define DEFCOLOR() "\x1B[;0m"
-
-static uint64_t getTimeMS()
-{
-	uint64_t time = 0;
-	QueryPerformanceCounter((LARGE_INTEGER*)&time);
-
-	return time / 10'000;
-}
-
 typedef struct BatteryInfo
 {
 	HANDLE handle;
@@ -195,7 +111,6 @@ static bool updateBatteryInfo(BatteryInfo* battery)
 
 	return false;
 }
-
 
 static BatteryInfo initBattery(const char* name)
 {
@@ -231,8 +146,6 @@ static uint32_t getSystrayPos()
 	GetWindowRect(trayHwnd, &rect);
 	return rect.left;
 }
-
-
 
 static void draw(sft_window* win, BatteryInfo* battery)
 {
