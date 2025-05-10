@@ -163,10 +163,10 @@ static void draw(sft_window* win, sft_rect winRect, sft_rect switchRect, sft_rec
 
 	case 1:
 		// Needed slightly more space, draw seperately slightly overlapped
-		sft_window_drawTextF(win, 0, closeRect.y - 4, 2,
+		sft_window_drawTextF(win, 0, closeRect.y + 10, 2,
 			battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%10u",
 			battery->capacity);
-		sft_window_drawTextF(win, 0, closeRect.y + 10, 2,
+		sft_window_drawTextF(win, 0, closeRect.y - 4, 2,
 			battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%10u",
 			battery->charge);
 		break;
