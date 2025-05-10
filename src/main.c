@@ -147,7 +147,7 @@ static uint32_t getSystrayPos()
 	return rect.left;
 }
 
-static void draw(sft_window* win, BatteryInfo* battery)
+static void draw(sft_window* win, sft_rect winRect, sft_rect closeRect, BatteryInfo* battery)
 {
 	sft_window_fill(win, 0x00000000);
 
@@ -155,7 +155,7 @@ static void draw(sft_window* win, BatteryInfo* battery)
 		battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%6.2f%%",
 		battery->charge * 100.f / battery->capacity);
 
-	sft_window_drawText(win, "X", 24 * 7.25, 8, 3, 0xFFFF0000);
+	sft_window_drawText(win, "X", closeRect.x, closeRect.y, 3, 0xFFFF0000);
 
 	sft_window_display(win);
 }
@@ -163,21 +163,29 @@ static void draw(sft_window* win, BatteryInfo* battery)
 
 int main(int argc, char** argv)
 {
-	sft_rect close = { 24 * 7.25, 8, 24, 24 };
-
 	// TODO: get battery name dynamically
 	// for now: 
 	// Device Manager -> Batteries -> {battery device} -> Details -> Physical Device Object name
 	BatteryInfo battery = initBattery("\\\\.\\GLOBALROOT\\Device\\0000002f");
 
-
 	sft_init();
-	sft_window* win = sft_window_open("", 24 * 8.25, 32, 
-		getSystrayPos() - (24 * 8.25),
-		sft_screenHeight() - 32,
+
+
+	sft_rect winRect;
+	winRect.w = 24 * 8.25;
+	winRect.h = 32;
+	winRect.x = getSystrayPos() - winRect.w;
+	winRect.h = sft_screenHeight() - winRect.h;
+
+	sft_rect closeRect = { winRect.w - 24, 8, 24, 24 };
+
+
+	sft_window* win = sft_window_open("",
+		winRect.w, winRect.h, winRect.x, winRect.y,
 		sft_flag_borderless | sft_flag_noresize | sft_flag_syshide | sft_flag_topmost);
 
-	draw(win, &battery);
+	draw(win, winRect, closeRect, &battery);
+
 
 	bool hoverClose = false;
 
@@ -185,27 +193,30 @@ int main(int argc, char** argv)
 	{
 		sft_input_update();
 
+		winRect.x = getSystrayPos() - winRect.w;
+		winRect.y = sft_screenHeight() - winRect.h;
+
+		sft_window_setTopmost(win, true);
+		sft_window_setPos(win, winRect.x, winRect.y);
+
+
 		if (hoverClose && sft_input_clickReleased(sft_click_Left))
 			break;
 
-		hoverClose = sft_colPointRect(close, sft_input_mousePos(win)) &&
+		hoverClose = sft_colPointRect(closeRect, sft_input_mousePos(win)) &&
 			sft_input_clickState(sft_click_Left);
 
 
-		sft_window_setTopmost(win, true);
-		sft_window_setPos(win, getSystrayPos() - (24 * 8.25), sft_screenHeight() - 32);
-
 		if (updateBatteryInfo(&battery))
-		{
-			draw(win, &battery);
-		}
+			draw(win, winRect, closeRect, &battery);
 
 		sft_sleep(50);
 	}
-	sft_window_close(win);
+
 
 	releaseBattery(&battery);
 
+	sft_window_close(win);
 	sft_shutdown();
 
 	return 0;
