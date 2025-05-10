@@ -170,6 +170,15 @@ static void draw(sft_window* win, sft_rect switchRect, sft_rect closeRect, Batte
 			battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%10u",
 			battery->charge);
 		break;
+
+	case 2:
+		sft_window_drawTextF(win, 0, closeRect.y, 3,
+			battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%6u%%",
+			battery->charge * 100 / battery->capacity);
+		break;
+
+	case 3:
+		break;
 	}
 
 	sft_window_drawChar(win, 'X', closeRect.x, closeRect.y, 3, 0xFFFF0000);
@@ -218,6 +227,7 @@ int main(int argc, char** argv)
 	switchRectDown.y = switchRectUp.y + switchRectUp.h;
 
 	uint8_t drawMode = 0;
+	uint8_t numDrawModes = 4;
 
 	bool hoverSwitchUp = false;
 	bool hoverSwitchDown = false;
@@ -250,7 +260,7 @@ int main(int argc, char** argv)
 
 		if (hoverSwitchUp && sft_input_clickReleased(sft_click_Left))
 		{
-			MODINC(drawMode, 3);
+			MODINC(drawMode, numDrawModes);
 			draw(win, switchRectUp, closeRect, &battery, drawMode);
 		}
 		hoverSwitchUp = sft_colPointRect(switchRectUp, sft_input_mousePos(win)) &&
@@ -258,7 +268,7 @@ int main(int argc, char** argv)
 
 		if (hoverSwitchDown && sft_input_clickReleased(sft_click_Left))
 		{
-			MODDEC(drawMode, 3);
+			MODDEC(drawMode, numDrawModes);
 			draw(win, switchRectUp, closeRect, &battery, drawMode);
 		}
 		hoverSwitchDown = sft_colPointRect(switchRectDown, sft_input_mousePos(win)) &&
