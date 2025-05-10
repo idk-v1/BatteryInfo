@@ -151,13 +151,11 @@ static void draw(sft_window* win, BatteryInfo* battery)
 {
 	sft_window_fill(win, 0x00000000);
 
-	sft_window_drawTextF(win, 0, 8, 3, 0xFFFFFFFF, "%6.2f%%",
+	sft_window_drawTextF(win, 0, 8, 3, 
+		battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%6.2f%%",
 		battery->charge * 100.f / battery->capacity);
 
-	sft_window_drawText(win, "X", 24 * 8, 8, 3, 0xFFFF0000);
-
-	if (battery->isCharging)
-		sft_window_drawText(win, "+", 24 * 7, 8, 3, 0xFF00FF00);
+	sft_window_drawText(win, "X", 24 * 7.25, 8, 3, 0xFFFF0000);
 
 	sft_window_display(win);
 }
@@ -165,10 +163,7 @@ static void draw(sft_window* win, BatteryInfo* battery)
 
 int main(int argc, char** argv)
 {
-	enableVT();
-	disableCursor();
-
-	sft_rect close = { 24 * 8, 8, 24, 24 };
+	sft_rect close = { 24 * 7.25, 8, 24, 24 };
 
 	// TODO: get battery name dynamically
 	// for now: 
@@ -177,8 +172,8 @@ int main(int argc, char** argv)
 
 
 	sft_init();
-	sft_window* win = sft_window_open("", 24 * 9, 32, 
-		getSystrayPos() - (24 * 9),
+	sft_window* win = sft_window_open("", 24 * 8.25, 32, 
+		getSystrayPos() - (24 * 8.25),
 		sft_screenHeight() - 32,
 		sft_flag_borderless | sft_flag_noresize | sft_flag_syshide | sft_flag_topmost);
 
@@ -198,7 +193,7 @@ int main(int argc, char** argv)
 
 
 		sft_window_setTopmost(win, true);
-		sft_window_setPos(win, getSystrayPos() - (24 * 9), sft_screenHeight() - 32);
+		sft_window_setPos(win, getSystrayPos() - (24 * 8.25), sft_screenHeight() - 32);
 
 		if (updateBatteryInfo(&battery))
 		{
