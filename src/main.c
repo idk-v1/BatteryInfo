@@ -147,18 +147,40 @@ static uint32_t getSystrayPos()
 	return rect.left;
 }
 
-static void draw(sft_window* win, sft_rect winRect, sft_rect closeRect, BatteryInfo* battery)
+static void draw(sft_window* win, sft_rect winRect, sft_rect switchRect, sft_rect closeRect, BatteryInfo* battery, uint8_t drawMode)
 {
+	printf("Draw Mode: %u\n", (uint32_t)drawMode);
+
 	sft_window_fill(win, 0x00000000);
 
-	sft_window_drawTextF(win, 0, 8, 3, 
-		battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%6.2f%%",
-		battery->charge * 100.f / battery->capacity);
+	switch (drawMode)
+	{
+	case 0:
+		sft_window_drawTextF(win, 0, closeRect.y, 3,
+			battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%6.2f%%",
+			battery->charge * 100.f / battery->capacity);
+		break;
 
-	sft_window_drawText(win, "X", closeRect.x, closeRect.y, 3, 0xFFFF0000);
+	case 1:
+		// Needed slightly more space, draw seperately slightly overlapped
+		sft_window_drawTextF(win, 0, closeRect.y - 4, 2,
+			battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%10u",
+			battery->capacity);
+		sft_window_drawTextF(win, 0, closeRect.y + 10, 2,
+			battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%10u",
+			battery->charge);
+		break;
+	}
+
+	sft_window_drawChar(win, 'X', closeRect.x, closeRect.y, 3, 0xFFFF0000);
+	
+	sft_window_drawChar(win, sft_key_Down, switchRect.x, switchRect.y + 3, 3, 0xFF7F7F7F);
+	sft_window_drawChar(win, sft_key_Up, switchRect.x, switchRect.y - 1, 3, 0xFFBFBFBF);
 
 	sft_window_display(win);
 }
+
+#define MODINC(var, mod) (var) = ((var) + 1) % (mod)
 
 
 int main(int argc, char** argv)
@@ -170,24 +192,36 @@ int main(int argc, char** argv)
 
 	sft_init();
 
-
 	sft_rect winRect;
-	winRect.w = 24 * 8.25;
+	winRect.w = 24 * 9.25;
 	winRect.h = 32;
 	winRect.x = getSystrayPos() - winRect.w;
-	winRect.h = sft_screenHeight() - winRect.h;
+	winRect.y = sft_screenHeight() - winRect.h;
 
-	sft_rect closeRect = { winRect.w - 24, 8, 24, 24 };
+	sft_rect closeRect;
+	closeRect.w = 24;
+	closeRect.h = 24;
+	closeRect.x = winRect.w - closeRect.w;
+	closeRect.y = 8;
+
+	sft_rect switchRect;
+	switchRect.w = 24;
+	switchRect.h = 28;
+	switchRect.x = closeRect.x - switchRect.w;
+	switchRect.y = 4;
+
+	uint8_t drawMode = 0;
+
+	bool hoverSwitch = false;
+	bool hoverClose = false;
 
 
 	sft_window* win = sft_window_open("",
 		winRect.w, winRect.h, winRect.x, winRect.y,
 		sft_flag_borderless | sft_flag_noresize | sft_flag_syshide | sft_flag_topmost);
 
-	draw(win, winRect, closeRect, &battery);
+	draw(win, winRect, switchRect, closeRect, &battery, drawMode);
 
-
-	bool hoverClose = false;
 
 	while (sft_window_update(win))
 	{
@@ -200,15 +234,26 @@ int main(int argc, char** argv)
 		sft_window_setPos(win, winRect.x, winRect.y);
 
 
+
 		if (hoverClose && sft_input_clickReleased(sft_click_Left))
 			break;
 
 		hoverClose = sft_colPointRect(closeRect, sft_input_mousePos(win)) &&
 			sft_input_clickState(sft_click_Left);
 
+		if (hoverSwitch && sft_input_clickReleased(sft_click_Left))
+		{
+			MODINC(drawMode, 2);
+			draw(win, winRect, switchRect, closeRect, &battery, drawMode);
+		}
+
+		hoverSwitch = sft_colPointRect(switchRect, sft_input_mousePos(win)) &&
+			sft_input_clickState(sft_click_Left);
+
+
 
 		if (updateBatteryInfo(&battery))
-			draw(win, winRect, closeRect, &battery);
+			draw(win, winRect, switchRect, closeRect, &battery, drawMode);
 
 		sft_sleep(50);
 	}
