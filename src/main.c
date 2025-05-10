@@ -271,15 +271,21 @@ int main(int argc, char** argv)
 
 	draw(win, &battery);
 
+	bool hoverClose = false;
 
-	while (sft_window_update(win) && 
-		!(sft_colPointRect(close, sft_input_mousePos(win)) &&
-		sft_input_clickPressed(sft_click_Left)))
+	while (sft_window_update(win))
 	{
+		sft_input_update();
+
+		if (hoverClose && sft_input_clickReleased(sft_click_Left))
+			break;
+
+		hoverClose = sft_colPointRect(close, sft_input_mousePos(win)) &&
+			sft_input_clickState(sft_click_Left);
+
+
 		sft_window_setTopmost(win, true);
 		sft_window_setPos(win, getSystrayPos() - (24 * 9), sft_screenHeight() - 32);
-
-		sft_input_update();
 
 		if (updateBatteryInfo(&battery))
 		{
