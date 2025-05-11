@@ -15,6 +15,24 @@
 
 #include "softdraw/softdraw.h"
 
+#define ARRAY(type) typedef struct {type* data; uint64_t length; } type##_array;
+
+#define MODINC(var, mod) (var) = ((var) + 1) % (mod)
+#define MODDEC(var, mod) (var) = ((var) + (mod) - 1) % (mod)
+
+
+typedef struct BatteryInfo
+{
+	HANDLE handle;
+	uint32_t wear;
+	uint32_t capacity;
+	uint32_t charge;
+	uint8_t isCharging;
+} BatteryInfo;
+
+ARRAY(BatteryInfo);
+
+
 static void winErr(const char* label)
 {
 	DWORD err = GetLastError();
@@ -37,6 +55,7 @@ static HANDLE openDevice(const char* name)
 		FILE_SHARE_READ | FILE_SHARE_WRITE,
 		NULL, OPEN_EXISTING, 0, NULL);
 }
+
 
 static uint32_t getBatteryTag(HANDLE hDev)
 {
@@ -86,31 +105,6 @@ static BATTERY_STATUS getBatteryStatus(HANDLE hDev)
 	return batteryStatus;
 }
 
-typedef struct BatteryInfo
-{
-	HANDLE handle;
-	uint32_t wear;
-	uint32_t capacity;
-	uint32_t charge;
-	uint8_t isCharging;
-} BatteryInfo;
-
-
-static bool updateBatteryInfo(BatteryInfo* battery)
-{
-	BATTERY_STATUS batteryStatus = getBatteryStatus(battery->handle);
-
-	bool isCharging = (batteryStatus.PowerState & BATTERY_POWER_ON_LINE) != 0;
-
-	if (battery->charge != batteryStatus.Capacity || battery->isCharging != isCharging)
-	{
-		battery->isCharging = isCharging;
-		battery->charge = batteryStatus.Capacity;
-		return true;
-	}
-
-	return false;
-}
 
 static BatteryInfo initBattery(const char* name)
 {
@@ -124,7 +118,9 @@ static BatteryInfo initBattery(const char* name)
 	battery.wear = batteryInfo.DesignedCapacity;
 	battery.wear -= battery.capacity;
 
-	updateBatteryInfo(&battery);
+	BATTERY_STATUS batteryStatus = getBatteryStatus(battery.handle);
+	battery.charge = batteryStatus.Capacity;
+	battery.isCharging = (batteryStatus.PowerState & BATTERY_POWER_ON_LINE) != 0;
 
 	return battery;
 }
@@ -133,6 +129,113 @@ static void releaseBattery(BatteryInfo* battery)
 {
 	CloseHandle(battery->handle);
 	memset(battery, 0, sizeof(*battery));
+}
+
+
+static uint32_t getBatteryCount()
+{
+	HDEVINFO devInfo = SetupDiGetClassDevsA(&GUID_DEVCLASS_BATTERY,
+		NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+
+	uint32_t i = 0;
+	for (; ; i++)
+	{
+		SP_DEVICE_INTERFACE_DATA did = { 0 };
+		did.cbSize = sizeof(did);
+
+		if (SetupDiEnumDeviceInterfaces(devInfo, NULL,
+			&GUID_DEVCLASS_BATTERY, i, &did))
+		{
+			uint32_t devInfoSize = 0;
+			SetupDiGetDeviceInterfaceDetailA(devInfo, &did, NULL, NULL,
+				&devInfoSize, NULL);
+
+			if (GetLastError() == ERROR_NO_MORE_ITEMS)
+				break;
+		}
+		else
+			break;
+	}
+
+	SetupDiDestroyDeviceInfoList(devInfo);
+
+	return i;
+}
+
+static BatteryInfo_array getBatteries()
+{
+	BatteryInfo_array batteries = { 0 };
+	batteries.length = getBatteryCount();
+	batteries.data = malloc(sizeof(*batteries.data) * batteries.length);
+
+	HDEVINFO devInfo = SetupDiGetClassDevsA(&GUID_DEVCLASS_BATTERY,
+		NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+
+	for (uint32_t i = 0; batteries.length; i++)
+	{
+		SP_DEVICE_INTERFACE_DATA did = { 0 };
+		did.cbSize = sizeof(did);
+
+		if (SetupDiEnumDeviceInterfaces(devInfo, NULL,
+			&GUID_DEVCLASS_BATTERY, i, &did))
+		{
+			uint32_t devInfoSize = 0;
+			SetupDiGetDeviceInterfaceDetailA(devInfo, &did, NULL, NULL,
+				&devInfoSize, NULL);
+
+			SP_INTERFACE_DEVICE_DETAIL_DATA_A* iddd = malloc(devInfoSize);
+			if (iddd)
+			{
+				iddd->cbSize = sizeof(*iddd);
+				SetupDiGetDeviceInterfaceDetailA(devInfo, &did, iddd,
+					devInfoSize, &devInfoSize, NULL);
+
+				batteries.data[i] = initBattery(iddd->DevicePath);
+
+				free(iddd);
+			}
+		}
+		else
+			break;
+	}
+
+	SetupDiDestroyDeviceInfoList(devInfo);
+
+	return batteries;
+}
+
+
+static bool updateBatteries(BatteryInfo_array* batteries)
+{
+	bool change = false;
+
+	uint32_t batteryCount = getBatteryCount();
+	if (batteryCount != batteries->length)
+	{
+		change = true;
+
+		for (uint32_t i = 0; i < batteries->length; i++)
+			releaseBattery(&batteries->data[i]);
+		free(batteries->data);
+
+		*batteries = getBatteries();
+	}
+
+	for (uint32_t i = 0; i < batteries->length; i++)
+	{
+		BATTERY_STATUS batteryStatus = getBatteryStatus(batteries->data[i].handle);
+
+		bool isCharging = (batteryStatus.PowerState & BATTERY_POWER_ON_LINE) != 0;
+
+		if (batteries->data[i].charge != batteryStatus.Capacity || 
+			batteries->data[i].isCharging != isCharging)
+			change = true;
+
+		batteries->data[i].isCharging = isCharging;
+		batteries->data[i].charge = batteryStatus.Capacity;
+	}
+
+	return change;
 }
 
 
@@ -147,9 +250,20 @@ static uint32_t getSystrayPos()
 	return rect.left;
 }
 
-static void draw(sft_window* win, sft_rect switchRect, sft_rect closeRect, BatteryInfo* battery, uint8_t drawMode)
+
+static void draw(sft_window* win, sft_rect switchRect, sft_rect closeRect, BatteryInfo_array batteries, uint8_t drawMode)
 {
-	printf("Draw Mode: %u\n", (uint32_t)drawMode);
+	uint32_t totalCapacity = 0;
+	uint32_t totalCharge = 0;
+	bool isCharging = false;
+
+	for (uint32_t i = 0; i < batteries.length; i++)
+	{
+		totalCapacity += batteries.data[i].capacity;
+		totalCharge += batteries.data[i].charge;
+		if (batteries.data[i].isCharging)
+			isCharging = true;
+	}
 
 	sft_window_fill(win, 0x00000000);
 
@@ -157,24 +271,24 @@ static void draw(sft_window* win, sft_rect switchRect, sft_rect closeRect, Batte
 	{
 	case 0:
 		sft_window_drawTextF(win, 0, closeRect.y, 3,
-			battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%6.2f%%",
-			battery->charge * 100.f / battery->capacity);
+			isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%6.2f%%",
+			totalCharge * 100.f / totalCapacity);
 		break;
 
 	case 1:
 		// Needed slightly more space, draw seperately slightly overlapped
 		sft_window_drawTextF(win, 8, closeRect.y + 10, 2,
-			battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%10u",
-			battery->capacity);
+			isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%10u",
+			totalCapacity);
 		sft_window_drawTextF(win, 8, closeRect.y - 4, 2,
-			battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%10u",
-			battery->charge);
+			isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%10u",
+			totalCharge);
 		break;
 
 	case 2:
 		sft_window_drawTextF(win, 0, closeRect.y, 3,
-			battery->isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%6u%%",
-			battery->charge * 100 / battery->capacity);
+			isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%6u%%",
+			totalCharge * 100 / totalCapacity);
 		break;
 
 	case 3:
@@ -189,16 +303,10 @@ static void draw(sft_window* win, sft_rect switchRect, sft_rect closeRect, Batte
 	sft_window_display(win);
 }
 
-#define MODINC(var, mod) (var) = ((var) + 1) % (mod)
-#define MODDEC(var, mod) (var) = ((var) + (mod) - 1) % (mod)
-
 
 int main(int argc, char** argv)
 {
-	// TODO: get battery name dynamically
-	// for now: 
-	// Device Manager -> Batteries -> {battery device} -> Details -> Physical Device Object name
-	BatteryInfo battery = initBattery("\\\\.\\GLOBALROOT\\Device\\0000002f");
+	BatteryInfo_array batteries = getBatteries();
 
 	sft_init();
 
@@ -238,7 +346,7 @@ int main(int argc, char** argv)
 		winRect.w, winRect.h, winRect.x, winRect.y,
 		sft_flag_borderless | sft_flag_noresize | sft_flag_syshide | sft_flag_topmost);
 
-	draw(win, switchRectUp, closeRect, &battery, drawMode);
+	draw(win, switchRectUp, closeRect, batteries, drawMode);
 
 
 	while (sft_window_update(win))
@@ -261,7 +369,7 @@ int main(int argc, char** argv)
 		if (hoverSwitchUp && sft_input_clickReleased(sft_click_Left))
 		{
 			MODINC(drawMode, numDrawModes);
-			draw(win, switchRectUp, closeRect, &battery, drawMode);
+			draw(win, switchRectUp, closeRect, batteries, drawMode);
 		}
 		hoverSwitchUp = sft_colPointRect(switchRectUp, sft_input_mousePos(win)) &&
 			sft_input_clickState(sft_click_Left);
@@ -269,21 +377,23 @@ int main(int argc, char** argv)
 		if (hoverSwitchDown && sft_input_clickReleased(sft_click_Left))
 		{
 			MODDEC(drawMode, numDrawModes);
-			draw(win, switchRectUp, closeRect, &battery, drawMode);
+			draw(win, switchRectUp, closeRect, batteries, drawMode);
 		}
 		hoverSwitchDown = sft_colPointRect(switchRectDown, sft_input_mousePos(win)) &&
 			sft_input_clickState(sft_click_Left);
 
 
 
-		if (updateBatteryInfo(&battery))
-			draw(win, switchRectUp, closeRect, &battery, drawMode);
+		if (updateBatteries(&batteries))
+			draw(win, switchRectUp, closeRect, batteries, drawMode);
 
 		sft_sleep(50);
 	}
 
 
-	releaseBattery(&battery);
+	for (uint32_t i = 0; i < batteries.length; i++)
+		releaseBattery(&batteries.data[i]);
+	free(batteries.data);
 
 	sft_window_close(win);
 	sft_shutdown();
