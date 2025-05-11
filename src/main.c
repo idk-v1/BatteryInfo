@@ -272,7 +272,7 @@ static void draw(sft_window* win, sft_rect switchRect, sft_rect closeRect, Batte
 	case 0:
 		sft_window_drawTextF(win, 0, closeRect.y, 3,
 			isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%6.2f%%",
-			totalCharge * 100.f / totalCapacity);
+			totalCapacity ? (totalCharge * 100.f / totalCapacity) : 0);
 		break;
 
 	case 1:
@@ -288,7 +288,7 @@ static void draw(sft_window* win, sft_rect switchRect, sft_rect closeRect, Batte
 	case 2:
 		sft_window_drawTextF(win, 0, closeRect.y, 3,
 			isCharging ? 0xFF00FF00 : 0xFFFFFFFF, "%6u%%",
-			totalCharge * 100 / totalCapacity);
+			totalCapacity ? (totalCharge * 100 / totalCapacity) : 0);
 		break;
 
 	case 3:
