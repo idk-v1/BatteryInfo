@@ -210,6 +210,7 @@ static bool updateBatteries(BatteryInfo_array* batteries)
 	bool change = false;
 
 	uint32_t batteryCount = getBatteryCount();
+printf("%u", batteryCount);
 	if (batteryCount != batteries->length)
 	{
 		change = true;
