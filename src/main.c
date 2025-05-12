@@ -20,10 +20,11 @@
 #define MODINC(var, mod) (var) = ((var) + 1) % (mod)
 #define MODDEC(var, mod) (var) = ((var) + (mod) - 1) % (mod)
 
-
 typedef struct BatteryInfo
 {
 	HANDLE handle;
+	uint32_t tag;
+
 	uint32_t wear;
 	uint32_t capacity;
 	uint32_t charge;
@@ -71,12 +72,12 @@ static uint32_t getBatteryTag(HANDLE hDev)
 	return tag;
 }
 
-static BATTERY_INFORMATION getBatteryInfo(HANDLE hDev)
+static BATTERY_INFORMATION getBatteryInfo(HANDLE hDev, uint32_t tag)
 {
 
 	BATTERY_QUERY_INFORMATION batteryQInfo = { 0 };
 	batteryQInfo.InformationLevel = BatteryInformation;
-	batteryQInfo.BatteryTag = getBatteryTag(hDev);
+	batteryQInfo.BatteryTag = tag;
 
 	BATTERY_INFORMATION batteryInfo = { 0 };
 
@@ -89,10 +90,10 @@ static BATTERY_INFORMATION getBatteryInfo(HANDLE hDev)
 	return batteryInfo;
 }
 
-static BATTERY_STATUS getBatteryStatus(HANDLE hDev)
+static BATTERY_STATUS getBatteryStatus(HANDLE hDev, uint32_t tag)
 {
 	BATTERY_WAIT_STATUS wait = { 0 };
-	wait.BatteryTag = getBatteryTag(hDev);
+	wait.BatteryTag = tag;
 
 	BATTERY_STATUS batteryStatus = { 0 };
 
@@ -109,21 +110,25 @@ static BATTERY_STATUS getBatteryStatus(HANDLE hDev)
 static BatteryInfo initBattery(const char* name)
 {
 	BatteryInfo battery = { 0 };
-
 	battery.handle = openDevice(name);
 
-	BATTERY_INFORMATION batteryInfo = getBatteryInfo(battery.handle);
+	battery.tag = getBatteryTag(battery.handle);
+
+	BATTERY_INFORMATION batteryInfo = getBatteryInfo(
+		battery.handle, battery.tag);
 	battery.capacity = batteryInfo.FullChargedCapacity;
 
 	battery.wear = batteryInfo.DesignedCapacity;
 	battery.wear -= battery.capacity;
 
-	BATTERY_STATUS batteryStatus = getBatteryStatus(battery.handle);
+	BATTERY_STATUS batteryStatus = getBatteryStatus(
+		battery.handle, battery.tag);
 	battery.charge = batteryStatus.Capacity;
 	battery.isCharging = (batteryStatus.PowerState & BATTERY_POWER_ON_LINE) != 0;
 
 	return battery;
 }
+
 
 static void releaseBattery(BatteryInfo* battery)
 {
@@ -209,22 +214,17 @@ static bool updateBatteries(BatteryInfo_array* batteries)
 {
 	bool change = false;
 
-	uint32_t batteryCount = getBatteryCount();
-printf("%u", batteryCount);
-	if (batteryCount != batteries->length)
-	{
-		change = true;
-
-		for (uint32_t i = 0; i < batteries->length; i++)
-			releaseBattery(&batteries->data[i]);
-		free(batteries->data);
-
-		*batteries = getBatteries();
-	}
-
 	for (uint32_t i = 0; i < batteries->length; i++)
 	{
-		BATTERY_STATUS batteryStatus = getBatteryStatus(batteries->data[i].handle);
+		uint32_t tag = getBatteryTag(batteries->data[i].handle);
+		if (batteries->data[i].tag != tag)
+			change = true;
+		batteries->data[i].tag = tag;
+
+		BATTERY_INFORMATION batteryInfo = getBatteryInfo(
+			batteries->data[i].handle, batteries->data[i].tag);
+		BATTERY_STATUS batteryStatus = getBatteryStatus(
+			batteries->data[i].handle, batteries->data[i].tag);
 
 		bool isCharging = (batteryStatus.PowerState & BATTERY_POWER_ON_LINE) != 0;
 
@@ -234,6 +234,11 @@ printf("%u", batteryCount);
 
 		batteries->data[i].isCharging = isCharging;
 		batteries->data[i].charge = batteryStatus.Capacity;
+
+		batteries->data[i].capacity = batteryInfo.FullChargedCapacity;
+
+		batteries->data[i].wear = batteryInfo.DesignedCapacity;
+		batteries->data[i].wear -= batteries->data[i].capacity;
 	}
 
 	return change;
